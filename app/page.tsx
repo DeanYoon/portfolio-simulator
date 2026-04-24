@@ -24,8 +24,8 @@ export default function AlphaShield() {
     setLogs((prev: string[]) => [msg, ...prev].slice(0, 50));
   };
 
-  const runSimulation = async (currParams = params) => {
-    addLog(`Running simulation: Q:${currParams.qqq_w}% S:${currParams.schd_w}% B:${currParams.vix_entry}`);
+  const runSimulation = async (currParams = params, silent = false) => {
+    if (!silent) addLog(`Running simulation: Q:${currParams.qqq_w}% S:${currParams.schd_w}% B:${currParams.vix_entry}`);
     try {
       const resp = await fetch("/api/backtest", {
         method: "POST",
@@ -105,19 +105,19 @@ export default function AlphaShield() {
 
   const runMonteCarlo = async () => {
     setIsOptimizing(true);
-    addLog("🚀 Starting Monte Carlo Optimization (100 iterations)...");
+    addLog("🚀 Starting High-Speed Monte Carlo (100 iterations)...");
     
     let bestFitness = -Infinity;
     
-    const initialRes = await runSimulation(params);
-    if (initialRes) {
-        const mddConstraint = initialRes.mdd <= (initialRes.spy_mdd * 0.7);
-        bestFitness = mddConstraint ? initialRes.roi : (initialRes.roi * 0.1);
+    // Set baseline from current params (if valid)
+    const current = await runSimulation(params);
+    if (current && current.mdd < current.spy_mdd) {
+        bestFitness = current.roi;
     }
 
+    // Optimization loop: aim for ~10 iterations per second
     for (let i = 0; i < 100; i++) {
-        // Quantize weights into 5% steps and ensure sum is 100
-        const q_steps = Math.floor(Math.random() * 21); // 0 to 20
+        const q_steps = Math.floor(Math.random() * 21);
         const s_steps = Math.floor(Math.random() * (21 - q_steps)); 
         const spy_steps = 20 - q_steps - s_steps;
 
@@ -131,22 +131,29 @@ export default function AlphaShield() {
             vix_exit: Math.floor((10 + Math.random() * 25) / 5) * 5
         };
 
-        const res = await runSimulation(testP);
+        const res = await runSimulation(testP, true); // silent mode to maintain speed
         if (res) {
-            const mddConstraint = res.mdd <= (res.spy_mdd * 0.7);
-            const fitness = mddConstraint ? res.roi : (res.roi * 0.1);
-
-            if (fitness > bestFitness) {
-                bestFitness = fitness;
-                addLog(`✨ NEW BEST [Iter ${i}]: ROI ${(res.roi*100).toFixed(2)}% | MDD ${(res.mdd*100).toFixed(2)}%`);
-                setParams(testP);
+            // STRICT CONSTRAINT: MDD must be lower than SPY
+            const isSaferThanSpy = res.mdd < res.spy_mdd;
+            
+            if (isSaferThanSpy) {
+                // If safer, we maximize ROI
+                const fitness = res.roi;
+                if (fitness > bestFitness) {
+                    bestFitness = fitness;
+                    setParams(testP);
+                    addLog(`🔥 NEW BEST [Iter ${i}]: ROI ${(res.roi*100).toFixed(2)}% | MDD ${(res.mdd*100).toFixed(2)}% < SPY ${(res.spy_mdd*100).toFixed(2)}%`);
+                }
             }
         }
-        if (i % 5 === 0) await new Promise(r => setTimeout(r, 0));
+        
+        // Control loop speed: ~100ms delay every iteration = ~10 per second
+        await new Promise(r => setTimeout(r, 100));
     }
     
     setIsOptimizing(false);
-    addLog("✅ Monte Carlo Optimization Complete.");
+    addLog("✅ Optimization Complete.");
+    runSimulation(); // Final refresh with best found
   };
 
   const updateParam = (key: string, val: number) => {
