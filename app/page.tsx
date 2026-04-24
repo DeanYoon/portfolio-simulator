@@ -1,41 +1,40 @@
-"use strict";
+"use client";
 
-const React = require("react");
-const { useEffect, useState, useRef } = React;
-const { createChart } = require("lightweight-charts");
+import React, { useEffect, useState, useRef } from "react";
+import { createChart, LineStyle, LineSeries } from "lightweight-charts";
 
 export default function AlphaShield() {
-  const [logs, setLogs] = useState([]);
-  const [bestResult, setBestResult] = useState(null);
-  const [stats, setStats] = useState({ roi: 0, mdd: 0, alpha: 0 });
-  const chartContainerRef = useRef();
-  const chartRef = useRef();
-  const seriesRef = useRef({ strategy: null, spy: null });
+  const [logs, setLogs] = useState<string[]>([]);
+  const [bestResult, setBestResult] = useState<any>(null);
+  const [stats, setStats] = useState({ roi: "0", mdd: "0", alpha: "0" });
+  const chartContainerRef = useRef<HTMLDivElement>(null);
+  const chartRef = useRef<any>();
+  const seriesRef = useRef<any>({ strategy: null, spy: null });
 
-  const addLog = (msg) => {
-    setLogs((prev) => [msg, ...prev].slice(0, 100));
+  const addLog = (msg: string) => {
+    setLogs((prev: string[]) => [msg, ...prev].slice(0, 100));
   };
 
   useEffect(() => {
     if (!chartContainerRef.current) return;
 
     const chart = createChart(chartContainerRef.current, {
-      layout: { backgroundColor: "#0b141d", textColor: "#d1d4dc" },
+      layout: { background: { type: 'solid' as any, color: "#0b141d" }, textColor: "#d1d4dc" },
       grid: { vertLines: { color: "#1c2631" }, horzLines: { color: "#1c2631" } },
       width: chartContainerRef.current.clientWidth,
       height: 480,
     });
 
-    const strategySeries = chart.addLineSeries({
+    const strategySeries = chart.addSeries(LineSeries, {
       color: "#00f3ff",
       lineWidth: 3,
       title: "Alpha Shield",
     });
 
-    const spySeries = chart.addLineSeries({
+    const spySeries = chart.addSeries(LineSeries, {
       color: "rgba(255, 255, 255, 0.4)",
       lineWidth: 1,
-      lineStyle: 2, // Dashed
+      lineStyle: LineStyle.Dashed,
       title: "SPY Benchmark",
     });
 
@@ -43,7 +42,9 @@ export default function AlphaShield() {
     seriesRef.current = { strategy: strategySeries, spy: spySeries };
 
     const handleResize = () => {
-      chart.applyOptions({ width: chartContainerRef.current.clientWidth });
+      if (chartContainerRef.current) {
+        chart.applyOptions({ width: chartContainerRef.current.clientWidth });
+      }
     };
     window.addEventListener("resize", handleResize);
     return () => {
@@ -73,8 +74,8 @@ export default function AlphaShield() {
         
         // Update Chart
         const history = data.result.history;
-        seriesRef.current.strategy.setData(history.map(d => ({ time: d.time, value: d.value })));
-        seriesRef.current.spy.setData(history.map(d => ({ time: d.time, value: d.spy })));
+        seriesRef.current.strategy.setData(history.map((d: any) => ({ time: d.time, value: d.value })));
+        seriesRef.current.spy.setData(history.map((d: any) => ({ time: d.time, value: d.spy })));
         
         setStats({
           roi: (data.result.roi * 100).toFixed(2),
@@ -124,10 +125,10 @@ export default function AlphaShield() {
             {bestResult && (
                <div className="absolute top-8 left-8 bg-[#0b141d]/80 p-4 rounded border border-gray-700 text-[10px] space-y-1">
                   <p className="text-[#00f3ff] font-bold underline mb-2">OPTIMAL PARAMETERS</p>
-                  {Object.entries(bestResult.params).map(([k, v]) => (
+                  {Object.entries(bestResult.params).map(([k, v]: [string, any]) => (
                     <div key={k} className="flex justify-between gap-4">
                       <span>{k.toUpperCase()}</span>
-                      <span className="text-white">{typeof v === 'number' ? v.toFixed(4) : v}</span>
+                      <span className="text-white">{typeof v === 'number' ? v.toFixed(4) : String(v)}</span>
                     </div>
                   ))}
                </div>
@@ -158,11 +159,11 @@ export default function AlphaShield() {
   );
 }
 
-function StatCard({ title, value, color }) {
+function StatCard({ title, value, color }: { title: string; value: string | number; color?: string }) {
   return (
     <div className="bg-[#1c2631] p-6 rounded-xl border border-gray-800">
       <div className="text-xs text-gray-500 font-bold mb-1 uppercase tracking-widest">{title}</div>
-      <div className="text-3xl font-black" style={{ color }}>{value}</div>
+      <div className="text-3xl font-black" style={{ color: color || "#fff" }}>{value}</div>
     </div>
   );
 }
