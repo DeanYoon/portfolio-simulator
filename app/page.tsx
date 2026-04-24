@@ -24,6 +24,7 @@ export default function AlphaShield() {
   };
 
   const runSimulation = async (currParams = params) => {
+    addLog(`Running simulation: Q:${currParams.qqq_w}% S:${currParams.schd_w}% B:${currParams.vix_entry}`);
     try {
       const resp = await fetch("/api/backtest", {
         method: "POST",
@@ -35,8 +36,14 @@ export default function AlphaShield() {
            spy_w: currParams.spy_w / 100,
         })
       });
+      
       const data = await resp.json();
       
+      if (data.error) {
+        addLog(`❌ API Error: ${data.error}`);
+        return;
+      }
+
       if (seriesRef.current.strategy && seriesRef.current.spy) {
         seriesRef.current.strategy.setData(data.history.map((d: any) => ({ time: d.time, value: d.value })));
         seriesRef.current.spy.setData(data.history.map((d: any) => ({ time: d.time, value: d.spy })));
@@ -44,9 +51,10 @@ export default function AlphaShield() {
           roi: (data.roi * 100).toFixed(2),
           equity: Math.floor(data.equity).toLocaleString()
         });
+        addLog(`✅ Re-calculated. ROI: ${(data.roi * 100).toFixed(2)}%`);
       }
-    } catch (e) {
-      addLog("Error running simulation");
+    } catch (e: any) {
+      addLog(`❌ Simulation Failed: ${e.message}`);
     }
   };
 
