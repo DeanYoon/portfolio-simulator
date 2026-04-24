@@ -105,9 +105,9 @@ export default function AlphaShield() {
           <h2 className="text-[#00f3ff] font-black text-xl mb-6">STRATEGY CONFIG</h2>
           
           <div className="space-y-6">
-            <Slider label={`QQQ Weight: ${params.qqq_w}%`} value={params.qqq_w} onChange={(v) => updateParam('qqq_w', v)} />
-            <Slider label={`SCHD Weight: ${params.schd_w}%`} value={params.schd_w} onChange={(v) => updateParam('schd_w', v)} />
-            <Slider label={`SPY Weight: ${params.spy_w}%`} value={params.spy_w} onChange={(v) => updateParam('spy_w', v)} />
+            <Slider label={`QQQ Weight: ${params.qqq_w}%`} value={params.qqq_w} onChange={(v: number) => updateParam('qqq_w', v)} />
+            <Slider label={`SCHD Weight: ${params.schd_w}%`} value={params.schd_w} onChange={(v: number) => updateParam('schd_w', v)} />
+            <Slider label={`SPY Weight: ${params.spy_w}%`} value={params.spy_w} onChange={(v: number) => updateParam('spy_w', v)} />
             
             <div className="pt-4 border-t border-gray-800">
               <label className="text-[10px] text-gray-500 block mb-2 uppercase">Initial Investment (Reserves: 100M)</label>
@@ -121,9 +121,9 @@ export default function AlphaShield() {
             </div>
 
             <div className="pt-4 border-t border-gray-800 space-y-4">
-              <Slider label={`VIX Entry >= ${params.vix_entry}`} min={10} max={60} value={params.vix_entry} onChange={(v) => updateParam('vix_entry', v)} />
-              <Slider label={`VIX Exit < ${params.vix_exit}`} min={10} max={30} value={params.vix_exit} onChange={(v) => updateParam('vix_exit', v)} />
-              <Slider label={`Daily Buy: ${params.buy_amt.toLocaleString()}`} min={100000} max={10000000} step={100000} value={params.buy_amt} onChange={(v) => updateParam('buy_amt', v)} />
+              <Slider label={`VIX Entry >= ${params.vix_entry}`} min={10} max={60} value={params.vix_entry} onChange={(v: number) => updateParam('vix_entry', v)} />
+              <Slider label={`VIX Exit < ${params.vix_exit}`} min={10} max={30} value={params.vix_exit} onChange={(v: number) => updateParam('vix_exit', v)} />
+              <Slider label={`Daily Buy: ${params.buy_amt.toLocaleString()}`} min={100000} max={10000000} step={100000} value={params.buy_amt} onChange={(v: number) => updateParam('buy_amt', v)} />
             </div>
           </div>
         </div>
