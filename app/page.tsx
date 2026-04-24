@@ -109,7 +109,6 @@ export default function AlphaShield() {
     
     let bestFitness = -Infinity;
     
-    // Use current params as baseline
     const initialRes = await runSimulation(params);
     if (initialRes) {
         const mddConstraint = initialRes.mdd <= (initialRes.spy_mdd * 0.7);
@@ -117,14 +116,19 @@ export default function AlphaShield() {
     }
 
     for (let i = 0; i < 100; i++) {
+        // Quantize weights into 5% steps and ensure sum is 100
+        const q_steps = Math.floor(Math.random() * 21); // 0 to 20
+        const s_steps = Math.floor(Math.random() * (21 - q_steps)); 
+        const spy_steps = 20 - q_steps - s_steps;
+
         const testP = {
-            qqq_w: Math.random() * 100,
-            schd_w: Math.random() * 100,
-            spy_w: Math.random() * 100,
-            initial_investment: 10000000 + Math.random() * 80000000,
-            vix_entry: 15 + Math.random() * 45,
-            buy_amt: 100000 + Math.random() * 5000000,
-            vix_exit: 10 + Math.random() * 25
+            qqq_w: q_steps * 5,
+            schd_w: s_steps * 5,
+            spy_w: spy_steps * 5,
+            initial_investment: Math.floor((10000000 + Math.random() * 80000000) / 1000000) * 1000000,
+            vix_entry: Math.floor((15 + Math.random() * 45) / 5) * 5,
+            buy_amt: Math.floor((100000 + Math.random() * 5000000) / 100000) * 100000,
+            vix_exit: Math.floor((10 + Math.random() * 25) / 5) * 5
         };
 
         const res = await runSimulation(testP);
@@ -146,7 +150,36 @@ export default function AlphaShield() {
   };
 
   const updateParam = (key: string, val: number) => {
-    const newParams = { ...params, [key]: val };
+    let newParams = { ...params, [key]: val };
+
+    // Maintain 100% sum constraint for weights with 5% steps
+    if (key === 'qqq_w' || key === 'schd_w' || key === 'spy_w') {
+        const snappedVal = Math.round(val / 5) * 5;
+        const otherKeys = ['qqq_w', 'schd_w', 'spy_w'].filter(k => k !== key);
+        const remaining = 100 - snappedVal;
+        
+        // Simple proportional redist among others in 5% steps
+        const currentOtherSum = params[otherKeys[0] as 'qqq_w' | 'schd_w' | 'spy_w'] + params[otherKeys[1] as 'qqq_w' | 'schd_w' | 'spy_w'];
+        
+        let val1, val2;
+        if (currentOtherSum === 0) {
+            val1 = Math.round((remaining / 2) / 5) * 5;
+            val2 = remaining - val1;
+        } else {
+            val1 = Math.round((remaining * (params[otherKeys[0] as 'qqq_w' | 'schd_w' | 'spy_w'] / currentOtherSum)) / 5) * 5;
+            val2 = remaining - val1;
+        }
+
+        newParams = { 
+            ...newParams, 
+            [key]: snappedVal,
+            [otherKeys[0]]: val1,
+            [otherKeys[1]]: val2
+        };
+    } else if (key === 'vix_entry' || key === 'vix_exit') {
+        newParams[key] = Math.round(val / 5) * 5;
+    }
+
     setParams(newParams);
     runSimulation(newParams);
   };
@@ -169,9 +202,9 @@ export default function AlphaShield() {
           </div>
           
           <div className="space-y-6">
-            <Slider label={`QQQ Weight: ${params.qqq_w}%`} value={params.qqq_w} onChange={(v: number) => updateParam('qqq_w', v)} />
-            <Slider label={`SCHD Weight: ${params.schd_w}%`} value={params.schd_w} onChange={(v: number) => updateParam('schd_w', v)} />
-            <Slider label={`SPY Weight: ${params.spy_w}%`} value={params.spy_w} onChange={(v: number) => updateParam('spy_w', v)} />
+            <Slider label={`QQQ Weight: ${params.qqq_w}%`} step={5} value={params.qqq_w} onChange={(v: number) => updateParam('qqq_w', v)} />
+            <Slider label={`SCHD Weight: ${params.schd_w}%`} step={5} value={params.schd_w} onChange={(v: number) => updateParam('schd_w', v)} />
+            <Slider label={`SPY Weight: ${params.spy_w}%`} step={5} value={params.spy_w} onChange={(v: number) => updateParam('spy_w', v)} />
             
             <div className="pt-4 border-t border-gray-800">
               <label className="text-[10px] text-gray-500 block mb-2 uppercase">Initial Investment (Reserves: 100M)</label>
@@ -185,8 +218,8 @@ export default function AlphaShield() {
             </div>
 
             <div className="pt-4 border-t border-gray-800 space-y-4">
-              <Slider label={`VIX Entry >= ${params.vix_entry}`} min={10} max={60} value={params.vix_entry} onChange={(v: number) => updateParam('vix_entry', v)} />
-              <Slider label={`VIX Exit < ${params.vix_exit}`} min={10} max={30} value={params.vix_exit} onChange={(v: number) => updateParam('vix_exit', v)} />
+              <Slider label={`VIX Entry >= ${params.vix_entry}`} min={10} max={60} step={5} value={params.vix_entry} onChange={(v: number) => updateParam('vix_entry', v)} />
+              <Slider label={`VIX Exit < ${params.vix_exit}`} min={10} max={30} step={5} value={params.vix_exit} onChange={(v: number) => updateParam('vix_exit', v)} />
               <Slider label={`Daily Buy: ${params.buy_amt.toLocaleString()}`} min={100000} max={10000000} step={100000} value={params.buy_amt} onChange={(v: number) => updateParam('buy_amt', v)} />
             </div>
           </div>
