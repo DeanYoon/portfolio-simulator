@@ -57,7 +57,7 @@ export default function AlphaShield() {
     setLogs([]);
     addLog("Initializing Optimizer...");
     
-    const eventSource = new EventSource("/api/python/optimize");
+    const eventSource = new EventSource("/api/optimize");
 
     eventSource.onmessage = (event) => {
       const data = JSON.parse(event.data);

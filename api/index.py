@@ -106,7 +106,7 @@ def run_backtest(df, params):
         'fitness': final_roi / (max_mdd + 1e-6) if max_mdd <= spy_max_mdd else 0
     }
 
-@app.route("/api/python/optimize")
+@app.route("/api/optimize")
 def optimize():
     def generate():
         df = fetch_data()
