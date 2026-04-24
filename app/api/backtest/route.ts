@@ -94,12 +94,32 @@ export async function POST(req: Request) {
     const finalEquity = history[history.length - 1].value;
     const finalRoi = (finalEquity - initialCashTotal) / initialCashTotal;
 
-    console.log("[API] Simulation complete. Final ROI:", finalRoi);
+    // Calc MDD
+    let maxVal = -Infinity;
+    let strategyMDD = 0;
+    history.forEach(h => {
+        if (h.value > maxVal) maxVal = h.value;
+        const ddn = (maxVal - h.value) / maxVal;
+        if (ddn > strategyMDD) strategyMDD = ddn;
+    });
+
+    let maxSpyVal = -Infinity;
+    let spyMDD = 0;
+    history.forEach(h => {
+        if (h.spy > maxSpyVal) maxSpyVal = h.spy;
+        const ddn = (maxSpyVal - h.spy) / maxSpyVal;
+        if (ddn > spyMDD) spyMDD = ddn;
+    });
+
+    console.log("[API] Simulation complete. ROI:", finalRoi, "MDD:", strategyMDD, "SPY MDD:", spyMDD);
 
     return NextResponse.json({
         history,
         roi: finalRoi,
-        equity: finalEquity
+        equity: finalEquity,
+        mdd: strategyMDD,
+        spy_mdd: spyMDD,
+        alpha: finalRoi - ((history[history.length-1].spy - initialCashTotal) / initialCashTotal)
     });
 
   } catch (error: any) {

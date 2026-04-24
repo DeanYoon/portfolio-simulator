@@ -14,7 +14,8 @@ export default function AlphaShield() {
     buy_amt: 1000000, // 1M buy
     vix_exit: 20
   });
-  const [stats, setStats] = useState({ roi: "0", equity: "0" });
+  const [stats, setStats] = useState({ roi: "0", equity: "0", mdd: "0", spyMdd: "0", gap: "0" });
+  const [isOptimizing, setIsOptimizing] = useState(false);
   const chartContainerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<any>();
   const seriesRef = useRef<{ strategy: ISeriesApi<"Line"> | null; spy: ISeriesApi<"Line"> | null }>({ strategy: null, spy: null });
@@ -49,10 +50,14 @@ export default function AlphaShield() {
         seriesRef.current.spy.setData(data.history.map((d: any) => ({ time: d.time, value: d.spy })));
         setStats({
           roi: (data.roi * 100).toFixed(2),
-          equity: Math.floor(data.equity).toLocaleString()
+          equity: Math.floor(data.equity).toLocaleString(),
+          mdd: (data.mdd * 100).toFixed(2),
+          spyMdd: (data.spy_mdd * 100).toFixed(2),
+          gap: (data.alpha * 100).toFixed(2)
         });
-        addLog(`✅ Re-calculated. ROI: ${(data.roi * 100).toFixed(2)}%`);
+        addLog(`✅ Re-calculated. ROI: ${(data.roi * 100).toFixed(2)}% | MDD: ${(data.mdd * 100).toFixed(2)}% (SPY: ${(data.spy_mdd * 100).toFixed(2)}%)`);
       }
+      return data;
     } catch (e: any) {
       addLog(`❌ Simulation Failed: ${e.message}`);
     }
@@ -98,6 +103,46 @@ export default function AlphaShield() {
     };
   }, []);
 
+  const runMonteCarlo = async () => {
+    setIsOptimizing(true);
+    addLog("🚀 Starting Monte Carlo Optimization (100 iterations)...");
+    
+    let bestFitness = -Infinity;
+    let bestP = params;
+
+    for (let i = 0; i < 100; i++) {
+        const testP = {
+            qqq_w: Math.random() * 100,
+            schd_w: Math.random() * 100,
+            spy_w: Math.random() * 100,
+            initial_investment: 10000000 + Math.random() * 80000000,
+            vix_entry: 15 + Math.random() * 40,
+            buy_amt: 100000 + Math.random() * 5000000,
+            vix_exit: 10 + Math.random() * 20
+        };
+
+        const res = await runSimulation(testP);
+        if (res) {
+            // Objective: Max ROI while MDD is significantly better than SPY
+            // Target: Strat MDD <= SPY MDD * 0.7 (30% less than spy)
+            const mddConstraint = res.mdd <= (res.spy_mdd * 0.7);
+            const fitness = mddConstraint ? res.roi : (res.roi * 0.1); // Heavy penalty if mdd constraint fails
+
+            if (fitness > bestFitness) {
+                bestFitness = fitness;
+                bestP = testP;
+                addLog(`✨ New Optimal found at iteration ${i}! ROI: ${(res.roi*100).toFixed(2)}% | MDD: ${(res.mdd*100).toFixed(2)}%`);
+                setParams(testP);
+            }
+        }
+        // Small delay to keep UI responsive
+        if (i % 10 === 0) await new Promise(r => setTimeout(r, 0));
+    }
+    
+    setIsOptimizing(false);
+    addLog("✅ Monte Carlo Optimization Complete.");
+  };
+
   const updateParam = (key: string, val: number) => {
     const newParams = { ...params, [key]: val };
     setParams(newParams);
@@ -110,7 +155,16 @@ export default function AlphaShield() {
         
         {/* Sidebar Controls */}
         <div className="space-y-4 bg-[#1c2631] p-6 rounded-2xl border border-gray-800">
-          <h2 className="text-[#00f3ff] font-black text-xl mb-6">STRATEGY CONFIG</h2>
+          <div className="flex justify-between items-center mb-6">
+            <h2 className="text-[#00f3ff] font-black text-xl">STRATEGY</h2>
+            <button 
+              onClick={runMonteCarlo}
+              disabled={isOptimizing}
+              className={`text-[10px] px-3 py-1.5 rounded-md font-bold transition-all ${isOptimizing ? 'bg-gray-700 text-gray-500' : 'bg-[#00f3ff] text-[#0b141d] hover:scale-105 active:scale-95 shadow-[0_0_10px_rgba(0,243,255,0.3)]'}`}
+            >
+              {isOptimizing ? 'OPTIMIZING...' : 'MONTE CARLO'}
+            </button>
+          </div>
           
           <div className="space-y-6">
             <Slider label={`QQQ Weight: ${params.qqq_w}%`} value={params.qqq_w} onChange={(v: number) => updateParam('qqq_w', v)} />
@@ -138,15 +192,11 @@ export default function AlphaShield() {
 
         {/* Main Dashboard */}
         <div className="lg:col-span-3 space-y-4">
-          <div className="grid grid-cols-2 gap-4">
-            <div className="bg-[#1c2631] p-6 rounded-2xl border border-gray-800">
-              <div className="text-gray-500 text-xs mb-1">TOTAL EQUITY</div>
-              <div className="text-3xl font-black text-white">{stats.equity} <span className="text-sm font-normal text-gray-600">KRW</span></div>
-            </div>
-            <div className="bg-[#1c2631] p-6 rounded-2xl border border-gray-800 text-right">
-              <div className="text-gray-500 text-xs mb-1">CUMULATIVE ROI</div>
-              <div className="text-3xl font-black text-[#00f3ff]">{stats.roi}%</div>
-            </div>
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+            <StatCard title="Total Equity" value={stats.equity} />
+            <StatCard title="Return" value={`${stats.roi}%`} color="#00f3ff" />
+            <StatCard title="Max Drawdown" value={`${stats.mdd}%`} color="#ff4d4d" subValue={`SPY: ${stats.spyMdd}%`} />
+            <StatCard title="Alpha (Gap)" value={`${stats.gap}%`} color={parseFloat(stats.gap) >= 0 ? "#00f3ff" : "#ff4d4d"} />
           </div>
 
           <div className="bg-[#1c2631] p-4 rounded-2xl border border-gray-800 relative">
@@ -182,11 +232,12 @@ function Slider({ label, value, onChange, min=0, max=100, step=1 }: any) {
   );
 }
 
-function StatCard({ title, value, color }: { title: string; value: string | number; color?: string }) {
+function StatCard({ title, value, color, subValue }: { title: string; value: string | number; color?: string; subValue?: string }) {
   return (
     <div className="bg-[#1c2631] p-6 rounded-xl border border-gray-800">
       <div className="text-xs text-gray-500 font-bold mb-1 uppercase tracking-widest">{title}</div>
-      <div className="text-3xl font-black" style={{ color: color || "#fff" }}>{value}</div>
+      <div className="text-2xl font-black" style={{ color: color || "#fff" }}>{value}</div>
+      {subValue && <div className="text-[10px] text-gray-600 mt-1">{subValue}</div>}
     </div>
   );
 }
