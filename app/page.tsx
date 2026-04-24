@@ -16,6 +16,7 @@ export default function AlphaShield() {
   });
   const [stats, setStats] = useState({ roi: "0", equity: "0", mdd: "0", spyMdd: "0", gap: "0" });
   const [isOptimizing, setIsOptimizing] = useState(false);
+  const stopSignal = useRef(false);
   const chartContainerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<any>();
   const seriesRef = useRef<{ strategy: ISeriesApi<"Line"> | null; spy: ISeriesApi<"Line"> | null }>({ strategy: null, spy: null });
@@ -105,18 +106,25 @@ export default function AlphaShield() {
 
   const runMonteCarlo = async () => {
     setIsOptimizing(true);
-    addLog("🚀 Starting High-Speed Monte Carlo (100 iterations)...");
+    stopSignal.current = false;
+    addLog("🚀 Starting Score-based Optimization (Goal: High ROI + Low MDD)...");
     
-    let bestFitness = -Infinity;
+    let bestScore = -Infinity;
     
-    // Set baseline from current params (if valid)
-    const current = await runSimulation(params);
-    if (current && current.mdd < current.spy_mdd) {
-        bestFitness = current.roi;
+    const current = await runSimulation(params, true);
+    if (current) {
+        // Score = ROI - (MDD - SPY_MDD) * weight
+        // If MDD > SPY_MDD, penalty is high
+        const mddPenalty = current.mdd > current.spy_mdd ? (current.mdd - current.spy_mdd) * 10 : 0;
+        bestScore = current.roi - mddPenalty;
     }
 
-    // Optimization loop: aim for ~10 iterations per second
-    for (let i = 0; i < 100; i++) {
+    for (let i = 0; i < 500; i++) {
+        if (stopSignal.current) {
+            addLog("🛑 Optimization stopped by user.");
+            break;
+        }
+
         const q_steps = Math.floor(Math.random() * 21);
         const s_steps = Math.floor(Math.random() * (21 - q_steps)); 
         const spy_steps = 20 - q_steps - s_steps;
@@ -131,29 +139,29 @@ export default function AlphaShield() {
             vix_exit: Math.floor((10 + Math.random() * 25) / 5) * 5
         };
 
-        const res = await runSimulation(testP, true); // silent mode to maintain speed
+        const res = await runSimulation(testP, true);
         if (res) {
-            // STRICT CONSTRAINT: MDD must be lower than SPY
-            const isSaferThanSpy = res.mdd < res.spy_mdd;
+            const mddDelta = res.mdd - res.spy_mdd;
+            // Penalty: If MDD is worse, subtract 10x the delta from ROI. If better, minor bonus.
+            const mddImpact = mddDelta > 0 ? mddDelta * 10 : mddDelta * 0.5;
+            const score = res.roi - mddImpact;
             
-            if (isSaferThanSpy) {
-                // If safer, we maximize ROI
-                const fitness = res.roi;
-                if (fitness > bestFitness) {
-                    bestFitness = fitness;
-                    setParams(testP);
-                    addLog(`🔥 NEW BEST [Iter ${i}]: ROI ${(res.roi*100).toFixed(2)}% | MDD ${(res.mdd*100).toFixed(2)}% < SPY ${(res.spy_mdd*100).toFixed(2)}%`);
-                }
+            if (score > bestScore) {
+                bestScore = score;
+                setParams(testP);
+                addLog(`🔥 SCORE: ${score.toFixed(4)} [Iter ${i}] ROI ${(res.roi*100).toFixed(2)}% | MDD ${(res.mdd*100).toFixed(2)}%`);
             }
         }
-        
-        // Control loop speed: ~100ms delay every iteration = ~10 per second
-        await new Promise(r => setTimeout(r, 100));
+        await new Promise(r => setTimeout(r, 50));
     }
     
     setIsOptimizing(false);
-    addLog("✅ Optimization Complete.");
-    runSimulation(); // Final refresh with best found
+    addLog("✅ Optimization Finished.");
+    runSimulation();
+  };
+
+  const stopOptimization = () => {
+    stopSignal.current = true;
   };
 
   const updateParam = (key: string, val: number) => {
@@ -200,11 +208,10 @@ export default function AlphaShield() {
           <div className="flex justify-between items-center mb-6">
             <h2 className="text-[#00f3ff] font-black text-xl">STRATEGY</h2>
             <button 
-              onClick={runMonteCarlo}
-              disabled={isOptimizing}
-              className={`text-[10px] px-3 py-1.5 rounded-md font-bold transition-all ${isOptimizing ? 'bg-gray-700 text-gray-500' : 'bg-[#00f3ff] text-[#0b141d] hover:scale-105 active:scale-95 shadow-[0_0_10px_rgba(0,243,255,0.3)]'}`}
+              onClick={isOptimizing ? stopOptimization : runMonteCarlo}
+              className={`text-[10px] px-3 py-1.5 rounded-md font-bold transition-all ${isOptimizing ? 'bg-red-500 text-white hover:bg-red-600' : 'bg-[#00f3ff] text-[#0b141d] hover:scale-105 active:scale-95 shadow-[0_0_10px_rgba(0,243,255,0.3)]'}`}
             >
-              {isOptimizing ? 'OPTIMIZING...' : 'MONTE CARLO'}
+              {isOptimizing ? 'STOP' : 'MONTE CARLO'}
             </button>
           </div>
           
