@@ -27,15 +27,21 @@ def fetch_data():
     return df
 
 def run_backtest(df, params):
-    # params: qqq_w, schd_w, spy_w, cash_w, vix_entry, mdd_entry, buy_amt, vix_exit
-    initial_cash = 100000000 # 100M KRW or USD baseline
+    # params: qqq_w, schd_w, spy_w, initial_investment, vix_entry, buy_amt, vix_exit
+    initial_cash = params.get('initial_investment', 100000000)
     
-    # Weights
-    w = np.array([params['qqq_w'], params['schd_w'], params['spy_w'], params['cash_w']])
-    # Normalize for safety
-    w = w / w.sum()
+    # Weights for Initial Investment
+    w_sum = params['qqq_w'] + params['schd_w'] + params['spy_w']
+    w = np.array([params['qqq_w'], params['schd_w'], params['spy_w']])
+    if w_sum > 0:
+        w = w / w_sum
+    else:
+        w = np.array([0.3, 0.4, 0.3])
     
-    cash = initial_cash * w[3]
+    # Initial Setup
+    total_equity = initial_cash
+    cash = 0  # Assuming full initial investment of the 'initial_investment' amount
+    
     holdings = {
         'QQQ': (initial_cash * w[0]) / df['QQQ'].iloc[0],
         'SCHD': (initial_cash * w[1]) / df['SCHD'].iloc[0],
@@ -44,9 +50,11 @@ def run_backtest(df, params):
         'TQQQ': 0
     }
     
+    # Reserves for tactical buying (The rest of the 100M if initial_investment < 100M)
+    reserves = 100000000 - initial_cash 
+    
     history = []
-    max_equity = initial_cash
-    max_mdd = 0
+    max_equity = 100000000
     spy_initial_price = df['SPY'].iloc[0]
     
     for i in range(len(df)):
@@ -55,59 +63,46 @@ def run_backtest(df, params):
         vix = prices['^VIX']
         
         # Current Equity
-        equity = cash
+        equity = reserves + cash
         for sym, qty in holdings.items():
             equity += qty * prices[sym]
         
-        # Track MDD
-        if equity > max_equity:
-            max_equity = equity
-        mdd = (max_equity - equity) / max_equity
-        if mdd > max_mdd:
-            max_mdd = mdd
+        # Track Max Equity for MDD if needed (omitted for speed unless required)
             
         # Tactical Logic
-        # 1. Exit Trigger
+        # 1. Exit Trigger: Sell QLD/TQQQ when VIX is low
         if vix < params['vix_exit']:
-            # Sell all leverage to cash
-            cash += holdings['QLD'] * prices['QLD']
-            cash += holdings['TQQQ'] * prices['TQQQ']
+            reserves += holdings['QLD'] * prices['QLD']
+            reserves += holdings['TQQQ'] * prices['TQQQ']
             holdings['QLD'] = 0
             holdings['TQQQ'] = 0
             
-        # 2. QLD Entry (VIX)
-        if vix >= params['vix_entry'] and cash > 0:
-            buy_val = min(cash, params['buy_amt'])
+        # 2. Entry Trigger: Buy when VIX is high
+        if vix >= params['vix_entry'] and reserves > 0:
+            buy_val = min(reserves, params['buy_amt'])
+            # Split tactical buy between QLD and TQQQ or just QLD? Spec said "buy leverage"
             holdings['QLD'] += buy_val / prices['QLD']
-            cash -= buy_val
-            
-        # 3. TQQQ Entry (MDD)
-        if mdd * 100 >= params['mdd_entry'] and cash > 0:
-            buy_val = min(cash, params['buy_amt'])
-            holdings['TQQQ'] += buy_val / prices['TQQQ']
-            cash -= buy_val
+            reserves -= buy_val
             
         history.append({
             'time': date.strftime('%Y-%m-%d'),
             'value': equity,
-            'spy': (prices['SPY'] / spy_initial_price) * initial_cash
+            'spy': (prices['SPY'] / spy_initial_price) * 100000000
         })
         
-    final_roi = (equity - initial_cash) / initial_cash
-    spy_mdd = (df['SPY'].max() - df['SPY'].iloc[-1]) / df['SPY'].max() # Simple approximation for speed
-    # Actual SPY Max MDD for safety constraint
-    spy_max_mdd = (df['SPY'].cummax() - df['SPY']).div(df['SPY'].cummax()).max()
-    
+    final_roi = (equity - 100000000) / 100000000
     return {
         'history': history,
         'roi': final_roi,
-        'mdd': max_mdd,
-        'spy_mdd': spy_max_mdd,
-        'fitness': final_roi / (max_mdd + 1e-6) if max_mdd <= spy_max_mdd else 0
+        'equity': equity
     }
 
-@app.route("/api/optimize")
-def optimize():
+@app.route("/api/backtest", methods=["POST"])
+def backtest():
+    data = request.json
+    df = fetch_data()
+    result = run_backtest(df, data)
+    return jsonify(result)
     def generate():
         df = fetch_data()
         best_params = None
