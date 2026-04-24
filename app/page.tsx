@@ -108,7 +108,13 @@ export default function AlphaShield() {
     addLog("🚀 Starting Monte Carlo Optimization (100 iterations)...");
     
     let bestFitness = -Infinity;
-    let bestP = params;
+    
+    // Use current params as baseline
+    const initialRes = await runSimulation(params);
+    if (initialRes) {
+        const mddConstraint = initialRes.mdd <= (initialRes.spy_mdd * 0.7);
+        bestFitness = mddConstraint ? initialRes.roi : (initialRes.roi * 0.1);
+    }
 
     for (let i = 0; i < 100; i++) {
         const testP = {
@@ -116,27 +122,23 @@ export default function AlphaShield() {
             schd_w: Math.random() * 100,
             spy_w: Math.random() * 100,
             initial_investment: 10000000 + Math.random() * 80000000,
-            vix_entry: 15 + Math.random() * 40,
+            vix_entry: 15 + Math.random() * 45,
             buy_amt: 100000 + Math.random() * 5000000,
-            vix_exit: 10 + Math.random() * 20
+            vix_exit: 10 + Math.random() * 25
         };
 
         const res = await runSimulation(testP);
         if (res) {
-            // Objective: Max ROI while MDD is significantly better than SPY
-            // Target: Strat MDD <= SPY MDD * 0.7 (30% less than spy)
             const mddConstraint = res.mdd <= (res.spy_mdd * 0.7);
-            const fitness = mddConstraint ? res.roi : (res.roi * 0.1); // Heavy penalty if mdd constraint fails
+            const fitness = mddConstraint ? res.roi : (res.roi * 0.1);
 
             if (fitness > bestFitness) {
                 bestFitness = fitness;
-                bestP = testP;
-                addLog(`✨ New Optimal found at iteration ${i}! ROI: ${(res.roi*100).toFixed(2)}% | MDD: ${(res.mdd*100).toFixed(2)}%`);
+                addLog(`✨ NEW BEST [Iter ${i}]: ROI ${(res.roi*100).toFixed(2)}% | MDD ${(res.mdd*100).toFixed(2)}%`);
                 setParams(testP);
             }
         }
-        // Small delay to keep UI responsive
-        if (i % 10 === 0) await new Promise(r => setTimeout(r, 0));
+        if (i % 5 === 0) await new Promise(r => setTimeout(r, 0));
     }
     
     setIsOptimizing(false);
